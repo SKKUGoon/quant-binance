@@ -3,7 +3,10 @@
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use std::collections::HashMap;
+use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
+
+use super::websocket::BinanceData;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -36,6 +39,7 @@ pub struct DepthSnapShot {
     pub asks: Vec<(String, String)>,
 }
 
+#[derive(Debug, Clone)]
 pub struct OrderBook {
     pub bids: HashMap<String, String>, // Price -> Quantity
     pub asks: HashMap<String, String>, // Price -> Quantity
@@ -104,6 +108,7 @@ impl OrderBook {
         grouped_vec
     }
 
+    #[allow(dead_code)]
     pub fn display(&self) {
         println!("\n=== Grouped Order Book ===");
 
@@ -154,6 +159,7 @@ pub async fn handle_order_book<R, S>(
     mut write: S,
     order_book: &mut OrderBook,
     snapshot: DepthSnapShot,
+    tx: mpsc::Sender<BinanceData>,
 ) where
     R: StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
     S: SinkExt<Message> + Unpin,
@@ -185,7 +191,14 @@ pub async fn handle_order_book<R, S>(
                             continue;
                         }
                         order_book.update(&event.data);
-                        order_book.display();
+
+                        if tx
+                            .send(BinanceData::OrderBook(order_book.clone()))
+                            .await
+                            .is_err()
+                        {
+                            eprintln!("Failed to send order book update");
+                        }
                         last_update_id = event.data.u;
                     }
                     Err(e) => eprintln!("Failed to parse event: {} - Error: {}", text, e),

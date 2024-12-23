@@ -1,6 +1,9 @@
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
+use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
+
+use super::websocket::BinanceData;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -10,7 +13,7 @@ pub struct BinanceWebsocketLiquidation {
 }
 
 #[allow(dead_code, non_snake_case)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct LiquidationEvent {
     pub e: String, // Event type
     pub E: u64,    // Event time
@@ -18,7 +21,7 @@ pub struct LiquidationEvent {
 }
 
 #[allow(dead_code, non_snake_case)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct LiquidationOrder {
     pub s: String,  // Symbol
     pub S: String,  // Side
@@ -33,8 +36,11 @@ pub struct LiquidationOrder {
     pub T: u64,     // Transaction Time
 }
 
-pub async fn handle_liquidation_order<R, S>(mut read: R, mut write: S)
-where
+pub async fn handle_liquidation_order<R, S>(
+    mut read: R,
+    mut write: S,
+    tx: mpsc::Sender<BinanceData>,
+) where
     R: StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
     S: SinkExt<Message> + Unpin,
     S::Error: std::fmt::Display,
@@ -45,6 +51,14 @@ where
                 match serde_json::from_str::<BinanceWebsocketLiquidation>(&text) {
                     Ok(event) => {
                         println!("Liquidation event: {:?}", event.data);
+
+                        if tx
+                            .send(BinanceData::Liquidation(event.data.clone()))
+                            .await
+                            .is_err()
+                        {
+                            eprintln!("Failed to send liquidation event");
+                        }
                     }
                     Err(e) => eprintln!("Failed to parse event: {} - Error: {}", text, e),
                 }

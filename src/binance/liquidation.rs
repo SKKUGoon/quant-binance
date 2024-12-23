@@ -50,8 +50,6 @@ pub async fn handle_liquidation_order<R, S>(
             Ok(Message::Text(text)) => {
                 match serde_json::from_str::<BinanceWebsocketLiquidation>(&text) {
                     Ok(event) => {
-                        println!("Liquidation event: {:?}", event.data);
-
                         if tx
                             .send(BinanceData::Liquidation(event.data.clone()))
                             .await

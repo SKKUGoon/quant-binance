@@ -13,6 +13,11 @@ pub async fn insert_liquidation(
     )
     .into();
 
+    let trade_time: SystemTime = chrono::DateTime::<chrono::Utc>::from(
+        std::time::UNIX_EPOCH + std::time::Duration::from_millis(liquidation_event.o.T),
+    )
+    .into();
+
     client
         .execute(
             "INSERT INTO binance.liquidations (
@@ -30,7 +35,7 @@ pub async fn insert_liquidation(
                 &liquidation_event.o.X,
                 &liquidation_event.o.l.parse::<f32>().unwrap(),
                 &liquidation_event.o.z.parse::<f32>().unwrap(),
-                &(liquidation_event.o.T as i64),
+                &trade_time,
             ],
         )
         .await?;

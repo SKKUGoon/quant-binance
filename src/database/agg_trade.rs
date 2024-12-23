@@ -13,6 +13,11 @@ pub async fn insert_agg_trade(
     )
     .into();
 
+    let trade_time: SystemTime = chrono::DateTime::<chrono::Utc>::from(
+        std::time::UNIX_EPOCH + std::time::Duration::from_millis(agg_trade_event.T),
+    )
+    .into();
+
     client
         .execute(
             "INSERT INTO binance.agg_trades (
@@ -29,7 +34,7 @@ pub async fn insert_agg_trade(
                 &agg_trade_event.q.parse::<f32>()?,
                 &(agg_trade_event.f as i64),
                 &(agg_trade_event.l as i64),
-                &(agg_trade_event.T as i64),
+                &trade_time,
                 &agg_trade_event.m,
             ],
         )

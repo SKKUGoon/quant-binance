@@ -43,6 +43,7 @@ pub struct DepthSnapShot {
 pub struct OrderBook {
     pub bids: HashMap<String, String>, // Price -> Quantity
     pub asks: HashMap<String, String>, // Price -> Quantity
+    pub time: u64,
 }
 
 impl OrderBook {
@@ -50,10 +51,13 @@ impl OrderBook {
         Self {
             bids: HashMap::new(),
             asks: HashMap::new(),
+            time: 0u64,
         }
     }
 
     pub fn update(&mut self, event: &DepthEvent) {
+        self.time = event.E;
+
         for (price, quantity) in event.b.iter() {
             if quantity == "0" {
                 self.bids.remove(price);

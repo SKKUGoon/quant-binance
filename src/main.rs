@@ -3,7 +3,7 @@ mod database;
 
 use binance::websocket::{connect_to_binance, BinanceData};
 use clap::{Arg, Command};
-use database::postgres::timescale_writer;
+use database::postgres::timescale_batch_writer;
 use std::io::{stdout, Write};
 use tokio::{sync::mpsc, time::Instant};
 
@@ -45,22 +45,31 @@ async fn main() {
     let symbol = config.symbol;
 
     // Timescale DB writer
-    let (tx, rx) = mpsc::channel::<BinanceData>(100);
+    let (tx, rx) = mpsc::channel::<BinanceData>(9999);
+
     tokio::spawn(async move {
-        if let Err(e) = timescale_writer(rx).await {
+        if let Err(e) = timescale_batch_writer(rx, 50).await {
             eprintln!("Failed to start timescale writer: {}", e);
         }
     });
 
-    // Time counter
-    let start_time = Instant::now();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            let elapsed = start_time.elapsed().as_secs();
-            let formatted_time = format_elapsed_time(elapsed);
-            print!("\rTime passed: {}s", formatted_time);
-            stdout().flush().unwrap();
+    tokio::spawn({
+        let start_time = Instant::now();
+        let tx_monitor = tx.clone(); // Clone `tx` specifically for monitoring
+        async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+                let elapsed = start_time.elapsed().as_secs();
+                let formatted_time = format_elapsed_time(elapsed);
+
+                print!(
+                    "\rTime passed: {}s | Buffer usage: {} / 9999 ",
+                    formatted_time,
+                    tx_monitor.capacity()
+                );
+                stdout().flush().unwrap();
+            }
         }
     });
 

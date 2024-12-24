@@ -9,3 +9,7 @@ Prepare TimeScale postgres database.
 ```bash
 cargo run --release
 ```
+
+## Hypothesis
+
+- There are places where large volumes are held

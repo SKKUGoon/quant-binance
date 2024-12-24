@@ -45,16 +45,25 @@ pub async fn batch_insert_order_book(
     let base_query =
         String::from("INSERT INTO binance.order_books (time, price_level, quantity, side) VALUES ");
 
-    let mut placeholders = Vec::new();
-    let mut params: Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>> = Vec::new();
+    let mut combined_data = Vec::new();
+    for bid_map in bids {
+        for (price, quantity) in bid_map {
+            combined_data.push((time, price, quantity.parse::<f32>()?, "bid"));
+        }
+    }
 
-    let mut param_index = 1;
-    for bid_map in bids.iter() {
-        for (price, quantity) in bid_map.iter() {
-            if quantity.parse::<f32>()? == 0.0 {
-                continue;
-            }
+    for ask_map in asks {
+        for (price, quantity) in ask_map {
+            combined_data.push((time, price, quantity.parse::<f32>()?, "ask"));
+        }
+    }
 
+    for chunks in combined_data.chunks(100) {
+        let mut placeholders = Vec::new();
+        let mut params: Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>> = Vec::new();
+        let mut param_index = 1;
+
+        for (time, price, quantity, side) in chunks {
             placeholders.push(format!(
                 "(to_timestamp(${}::FLOAT8), ${}, ${}, ${})",
                 param_index,
@@ -64,46 +73,21 @@ pub async fn batch_insert_order_book(
             ));
             params.push(Box::new(time / 1000.0));
             params.push(Box::new(price));
-            params.push(Box::new(quantity.parse::<f32>()?));
-            params.push(Box::new("bid"));
+            params.push(Box::new(quantity));
+            params.push(Box::new(side));
             param_index += 4;
         }
+
+        let query = format!("{}{}", base_query, placeholders.join(","));
+        client
+            .execute(
+                &query,
+                &params
+                    .iter()
+                    .map(|p| p.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
     }
-
-    for ask_map in asks.iter() {
-        for (price, quantity) in ask_map.iter() {
-            if quantity.parse::<f32>()? == 0.0 {
-                continue;
-            }
-
-            placeholders.push(format!(
-                "(to_timestamp(${}::FLOAT8), ${}, ${}, ${})",
-                param_index,
-                param_index + 1,
-                param_index + 2,
-                param_index + 3
-            ));
-            params.push(Box::new(time / 1000.0));
-            params.push(Box::new(price));
-            params.push(Box::new(quantity.parse::<f32>()?));
-            params.push(Box::new("ask"));
-            param_index += 4;
-        }
-    }
-
-    let query = format!("{}{}", base_query, placeholders.join(","));
-
-    eprintln!("Generated Query: {}", query);
-    eprintln!("Placeholder Count: {:?}", placeholders.len());
-    eprintln!("Params Count: {:?}", params.len());
-    client
-        .execute(
-            &query,
-            &params
-                .iter()
-                .map(|p| p.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
-                .collect::<Vec<_>>(),
-        )
-        .await?;
     Ok(())
 }

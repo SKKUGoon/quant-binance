@@ -72,16 +72,14 @@ pub async fn timescale_batch_writer(
     let mut liquidations = Vec::new();
     let mut agg_trades = Vec::new();
 
-    // If capacity becomes lower, we have to increase the batch size
-    let mut batch_size = 100;
-
     let client = connect_to_timescaledb().await?;
     while let Some(event) = rx.recv().await {
         // Dynamic batch size adjustment based on the buffer usage
-        let used_capacity = 9999 - rx.capacity();
-        if used_capacity > 1000 {
-            batch_size = 500;
-        }
+        let batch_size = if 9999 - rx.capacity() > 1000 {
+            500
+        } else {
+            100
+        };
 
         match event {
             BinanceData::OrderBook(order_book_update) => {

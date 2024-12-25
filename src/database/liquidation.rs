@@ -46,39 +46,74 @@ pub async fn batch_insert_liquidation(
         ) VALUES ",
     );
 
-    let mut placeholders = Vec::new();
-    let mut params: Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>> = Vec::new();
-    for (i, liquidation) in liquidations.iter().enumerate() {
-        let offset = i * 11;
-        placeholders.push(format!(
-            "(to_timestamp(${}::FLOAT8), ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, to_timestamp(${}::FLOAT8))",
-            offset + 1, offset + 2, offset + 3, offset + 4, offset + 5, offset + 6, offset + 7, offset + 8, offset + 9, offset + 10, offset + 11, offset + 12
+    let mut combined_data = Vec::new();
+    for liquid in liquidations {
+        combined_data.push((
+            liquid.E as f64 / 1000.0,
+            liquid.o.s.clone(),
+            liquid.o.S.clone(),
+            liquid.o.o.clone(),
+            liquid.o.f.clone(),
+            liquid.o.q.parse::<f32>()?,
+            liquid.o.p.parse::<f32>()?,
+            liquid.o.ap.parse::<f32>()?,
+            liquid.o.X.clone(),
+            liquid.o.l.parse::<f32>()?,
+            liquid.o.z.parse::<f32>()?,
+            liquid.o.T as f64 / 1000.0,
         ));
-
-        params.push(Box::new(liquidation.E as f64 / 1000.0));
-        params.push(Box::new(liquidation.o.s.clone()));
-        params.push(Box::new(liquidation.o.S.clone()));
-        params.push(Box::new(liquidation.o.o.clone()));
-        params.push(Box::new(liquidation.o.f.clone()));
-        params.push(Box::new(liquidation.o.q.parse::<f32>()?));
-        params.push(Box::new(liquidation.o.p.parse::<f32>()?));
-        params.push(Box::new(liquidation.o.ap.parse::<f32>()?));
-        params.push(Box::new(liquidation.o.X.clone()));
-        params.push(Box::new(liquidation.o.l.parse::<f32>()?));
-        params.push(Box::new(liquidation.o.z.parse::<f32>()?));
-        params.push(Box::new(liquidation.o.T as f64 / 1000.0));
     }
 
-    let query = format!("{}{}", base_query, placeholders.join(","));
-    client
-        .execute(
-            &query,
-            &params
-                .iter()
-                .map(|p| p.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
-                .collect::<Vec<_>>(),
-        )
-        .await?;
+    for chunks in combined_data.chunks(10) {
+        let mut placeholders = Vec::new();
+        let mut params: Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>> = Vec::new();
+        let mut param_index = 1;
+
+        for (
+            event_time,
+            symbol,
+            side,
+            order_type,
+            time_in_force,
+            quantity,
+            price,
+            avg_price,
+            order_status,
+            last_filled_quantity,
+            total_filled_quantity,
+            trade_time,
+        ) in chunks
+        {
+            placeholders.push(format!(
+                "(to_timestamp(${}::FLOAT8), ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, to_timestamp(${}::FLOAT8))",
+                param_index, param_index + 1, param_index + 2, param_index + 3, param_index + 4, param_index + 5, param_index + 6, param_index + 7, param_index + 8, param_index + 9, param_index + 10, param_index + 11
+            ));
+            params.push(Box::new(event_time));
+            params.push(Box::new(symbol));
+            params.push(Box::new(side));
+            params.push(Box::new(order_type));
+            params.push(Box::new(time_in_force));
+            params.push(Box::new(quantity));
+            params.push(Box::new(price));
+            params.push(Box::new(avg_price));
+            params.push(Box::new(order_status));
+            params.push(Box::new(last_filled_quantity));
+            params.push(Box::new(total_filled_quantity));
+            params.push(Box::new(trade_time));
+            param_index += 11;
+        }
+
+        let query = format!("{}{}", base_query, placeholders.join(","));
+        client
+            .execute(
+                &query,
+                &params
+                    .iter()
+                    .map(|p| p.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+    }
 
     Ok(())
 }

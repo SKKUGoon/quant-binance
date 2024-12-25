@@ -1,5 +1,10 @@
 # Data Gathering with Binance Websocket Client
 
+![Badge](https://img.shields.io/badge/Rust-000000.svg?&logo=Rust&logoColor=fff)
+![Badge](https://img.shields.io/badge/Binance-F0B90B.svg?&logo=Binance&logoColor=fff)
+![Badge](https://img.shields.io/badge/Timescale-FDB515.svg?&logo=Timescale&logoColor=fff)
+
+
 ## Function
 
 - Collects data from Binance Websocket for single coin

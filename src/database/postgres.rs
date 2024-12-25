@@ -78,12 +78,12 @@ pub async fn timescale_batch_writer(
         match event {
             BinanceData::OrderBook(order_book_update) => {
                 let time = order_book_update.time as f64;
-                order_book_bids.push(order_book_update.bids.clone());
-                order_book_asks.push(order_book_update.asks.clone());
+                order_book_bids.push((order_book_update.bids.clone(), time));
+                order_book_asks.push((order_book_update.asks.clone(), time));
+
                 if order_book_bids.len() >= batch_size || order_book_asks.len() >= batch_size {
                     if let Err(e) = batch_insert_order_book(
                         &client,
-                        time,
                         std::mem::take(&mut order_book_bids),
                         std::mem::take(&mut order_book_asks),
                     )

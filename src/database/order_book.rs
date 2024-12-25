@@ -34,9 +34,8 @@ pub async fn insert_order_book(
 #[allow(dead_code)]
 pub async fn batch_insert_order_book(
     client: &Client,
-    time: f64,
-    bids: Vec<HashMap<String, String>>,
-    asks: Vec<HashMap<String, String>>,
+    bids: Vec<(HashMap<String, String>, f64)>,
+    asks: Vec<(HashMap<String, String>, f64)>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if bids.is_empty() && asks.is_empty() {
         return Ok(());
@@ -46,13 +45,13 @@ pub async fn batch_insert_order_book(
         String::from("INSERT INTO binance.order_books (time, price_level, quantity, side) VALUES ");
 
     let mut combined_data = Vec::new();
-    for bid_map in bids {
+    for (bid_map, time) in bids {
         for (price, quantity) in bid_map {
             combined_data.push((time, price, quantity.parse::<f32>()?, "bid"));
         }
     }
 
-    for ask_map in asks {
+    for (ask_map, time) in asks {
         for (price, quantity) in ask_map {
             combined_data.push((time, price, quantity.parse::<f32>()?, "ask"));
         }

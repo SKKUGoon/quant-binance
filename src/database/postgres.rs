@@ -66,15 +66,23 @@ pub async fn timescale_writer(
 #[allow(dead_code)]
 pub async fn timescale_batch_writer(
     mut rx: mpsc::Receiver<BinanceData>,
-    batch_size: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut order_book_bids = Vec::new();
     let mut order_book_asks = Vec::new();
     let mut liquidations = Vec::new();
     let mut agg_trades = Vec::new();
 
+    // If capacity becomes lower, we have to increase the batch size
+    let mut batch_size = 100;
+
     let client = connect_to_timescaledb().await?;
     while let Some(event) = rx.recv().await {
+        // Dynamic batch size adjustment based on the buffer usage
+        let used_capacity = 9999 - rx.capacity();
+        if used_capacity > 1000 {
+            batch_size = 500;
+        }
+
         match event {
             BinanceData::OrderBook(order_book_update) => {
                 let time = order_book_update.time as f64;
@@ -95,7 +103,8 @@ pub async fn timescale_batch_writer(
             }
             BinanceData::Liquidation(liquidation_event) => {
                 liquidations.push(liquidation_event);
-                if liquidations.len() >= batch_size {
+                // Liquidations are less frequent, so we can batch them less frequently
+                if liquidations.len() >= batch_size / 10 {
                     if let Err(e) =
                         batch_insert_liquidation(&client, std::mem::take(&mut liquidations)).await
                     {

@@ -48,7 +48,7 @@ async fn main() {
     let (tx, rx) = mpsc::channel::<BinanceData>(9999);
 
     tokio::spawn(async move {
-        if let Err(e) = timescale_batch_writer(rx, 50).await {
+        if let Err(e) = timescale_batch_writer(rx).await {
             eprintln!("Failed to start timescale writer: {}", e);
         }
     });

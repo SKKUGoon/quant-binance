@@ -1,6 +1,7 @@
 // Order book management
 
 use futures::{SinkExt, StreamExt};
+use log::{error, info};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
@@ -82,14 +83,14 @@ impl OrderBook {
             let price_f64 = match price.parse::<f64>() {
                 Ok(p) => p,
                 Err(_) => {
-                    eprintln!("Failed to parse price: {}", price);
+                    error!("Failed to parse price: {}", price);
                     continue;
                 }
             };
             let quantity_f64 = match quantity.parse::<f64>() {
                 Ok(q) => q,
                 Err(_) => {
-                    eprintln!("Failed to parse quantity: {}", quantity);
+                    error!("Failed to parse quantity: {}", quantity);
                     continue;
                 }
             };
@@ -114,27 +115,27 @@ impl OrderBook {
 
     #[allow(dead_code)]
     pub fn display(&self) {
-        println!("\n=== Grouped Order Book ===");
+        info!("\n=== Grouped Order Book ===");
 
         let grouped_asks = self.group_prices(&self.asks);
         for (range, total_quantity) in grouped_asks.iter() {
-            println!(
+            info!(
                 "ASK  │ Price: {:>10} │ Quantity: {:>10.3}",
                 range, total_quantity
             );
         }
 
-        println!("─────┼──────────────────┼────────────────");
+        info!("─────┼──────────────────┼────────────────");
 
         let grouped_bids = self.group_prices(&self.bids);
         for (range, total_quantity) in grouped_bids.iter() {
-            println!(
+            info!(
                 "BID  │ Price: {:>10} │ Quantity: {:>10.3}",
                 range, total_quantity
             );
         }
 
-        println!("=== End of Order Book ===\n");
+        info!("=== End of Order Book ===\n");
     }
 }
 
@@ -174,7 +175,7 @@ pub async fn handle_order_book<R, S>(
     // Initialize the order book with the snapshot data
     for (price, quantity) in snapshot.bids.iter().chain(snapshot.asks.iter()) {
         if price.parse::<f64>().is_err() || quantity.parse::<f64>().is_err() {
-            eprintln!(
+            error!(
                 "Invalid snapshot data: price={}, quantity={}",
                 price, quantity
             );
@@ -191,7 +192,7 @@ pub async fn handle_order_book<R, S>(
                 match serde_json::from_str::<BinanceWebsocketDiffBook>(&text) {
                     Ok(event) => {
                         if event.data.u <= last_update_id || event.data.U <= last_update_id {
-                            eprintln!("Event out of order: Reinitializing");
+                            error!("Event out of order: Reinitializing");
                             continue;
                         }
                         order_book.update(&event.data);
@@ -201,24 +202,24 @@ pub async fn handle_order_book<R, S>(
                             .await
                             .is_err()
                         {
-                            eprintln!("Failed to send order book update");
+                            error!("Failed to send order book update");
                         }
                         last_update_id = event.data.u;
                     }
-                    Err(e) => eprintln!("Failed to parse event: {} - Error: {}", text, e),
+                    Err(e) => error!("Failed to parse event: {} - Error: {}", text, e),
                 }
             }
             Ok(Message::Ping(payload)) => {
                 if let Err(e) = write.send(Message::Pong(payload)).await {
-                    eprintln!("Failed to send Pong: {}", e);
+                    error!("Failed to send Pong: {}", e);
                 }
             }
-            Ok(Message::Pong(_)) => println!("Received Pong"),
+            Ok(Message::Pong(_)) => info!("Received Pong"),
             Ok(Message::Close(reason)) => {
-                println!("WebSocket closed: {:?}", reason);
+                info!("WebSocket closed: {:?}", reason);
                 break;
             }
-            Err(e) => eprintln!("Error reading message: {}", e),
+            Err(e) => error!("Error reading message: {}", e),
             _ => (),
         }
     }

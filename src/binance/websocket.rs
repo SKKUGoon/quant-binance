@@ -18,7 +18,7 @@ pub async fn connect_to_binance(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let streams = [
         format!("{}@depth", symbol.to_lowercase()),
-        format!("{}@forceOrder", symbol.to_lowercase()),
+        // format!("{}@forceOrder", symbol.to_lowercase()),
         format!("{}@aggTrade", symbol.to_lowercase()),
     ];
 

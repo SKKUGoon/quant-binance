@@ -1,4 +1,5 @@
 use futures::{SinkExt, StreamExt};
+use log::{error, info};
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
@@ -43,23 +44,23 @@ where
                             .await
                             .is_err()
                         {
-                            eprintln!("Failed to send agg trade event");
+                            error!("Failed to send agg trade event");
                         }
                     }
-                    Err(e) => eprintln!("Failed to parse event: {} - Error: {}", text, e),
+                    Err(e) => error!("Failed to parse event: {} - Error: {}", text, e),
                 }
             }
             Ok(Message::Ping(payload)) => {
                 if let Err(e) = write.send(Message::Pong(payload)).await {
-                    eprintln!("Failed to send Pong: {}", e);
+                    error!("Failed to send Pong: {}", e);
                 }
             }
-            Ok(Message::Pong(_)) => println!("Received Pong"),
+            Ok(Message::Pong(_)) => info!("Received Pong"),
             Ok(Message::Close(reason)) => {
-                println!("WebSocket closed: {:?}", reason);
+                info!("WebSocket closed: {:?}", reason);
                 break;
             }
-            Err(e) => eprintln!("Error reading message: {}", e),
+            Err(e) => error!("Error reading message: {}", e),
             _ => (),
         }
     }

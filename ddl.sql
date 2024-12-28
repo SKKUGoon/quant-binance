@@ -46,3 +46,18 @@ SELECT create_hypertable('binance.agg_trades', 'event_time');
 SELECT add_retention_policy('binance.order_books', INTERVAL '3 days');
 SELECT add_retention_policy('binance.liquidations', INTERVAL '3 days');
 SELECT add_retention_policy('binance.agg_trades', INTERVAL '3 days');
+
+-- Create the table
+CREATE TABLE binance.strategy_features (
+    time TIMESTAMP NOT NULL,         -- Time column for hypertable
+    value FLOAT4 NOT NULL, -- Numeric value
+    strategy_name TEXT NOT NULL,     -- Name of the strategy
+    PRIMARY KEY (time, strategy_name) -- Primary key (time must be part of it)
+);
+
+-- Convert the table to a hypertable
+SELECT create_hypertable(
+    'binance.strategy_features',  -- Table name
+    'time',                        -- Time column
+    chunk_time_interval => INTERVAL '1 day' -- Adjust chunk interval as needed
+);

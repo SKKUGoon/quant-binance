@@ -1,15 +1,21 @@
+use crate::database::{
+    features::orderbook_imbalance::{
+        calculate_feature_one,
+        insert_feature_one, // insert_feature_orderbook_imbalance,
+    },
+    order_book::batch_insert_order_book,
+};
 use crate::{
     binance::websocket::BinanceData,
     database::{
-        agg_trade::batch_insert_agg_trade, agg_trade::insert_agg_trade,
-        liquidation::batch_insert_liquidation, liquidation::insert_liquidation,
+        agg_trade::{batch_insert_agg_trade, insert_agg_trade},
+        liquidation::{batch_insert_liquidation, insert_liquidation},
         order_book::insert_order_book,
     },
 };
+use log::error;
 use tokio::sync::mpsc;
 use tokio_postgres::{Client, NoTls};
-
-use super::order_book::batch_insert_order_book;
 
 #[allow(dead_code)]
 pub async fn connect_to_timescaledb() -> Result<Client, Box<dyn std::error::Error>> {
@@ -20,7 +26,7 @@ pub async fn connect_to_timescaledb() -> Result<Client, Box<dyn std::error::Erro
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("Connection error: {}", e);
+            error!("Connection error: {}", e);
         }
     });
 
@@ -44,19 +50,61 @@ pub async fn timescale_writer(
                 )
                 .await
                 {
-                    eprintln!("Failed to insert order book update: {}", e);
+                    error!("Failed to insert order book update: {}", e);
                 }
             }
             BinanceData::Liquidation(liquidation_event) => {
                 if let Err(e) = insert_liquidation(&client, liquidation_event).await {
-                    eprintln!("Failed to insert liquidation event: {}", e);
+                    error!("Failed to insert liquidation event: {}", e);
                 }
             }
             BinanceData::AggTrade(agg_trade_event) => {
                 if let Err(e) = insert_agg_trade(&client, agg_trade_event).await {
-                    eprintln!("Failed to insert agg trade event: {}", e);
+                    error!("Failed to insert agg trade event: {}", e);
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub async fn feature_writer(
+    mut rx: mpsc::Receiver<BinanceData>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = connect_to_timescaledb().await?;
+    let mut current_price = String::from("0.0");
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            BinanceData::OrderBook(order_book_update) => {
+                let time = order_book_update.time as f64;
+                let feature_one_05 = calculate_feature_one(
+                    order_book_update.bids.clone(),
+                    order_book_update.asks.clone(),
+                    current_price.clone(),
+                    0.05,
+                );
+                let feature_one_10 = calculate_feature_one(
+                    order_book_update.bids.clone(),
+                    order_book_update.asks.clone(),
+                    current_price.clone(),
+                    0.1,
+                );
+
+                if let Err(e) = insert_feature_one(&client, time, feature_one_05, 0.05).await {
+                    error!("Failed to insert order book imbalance: {}", e);
+                }
+
+                if let Err(e) = insert_feature_one(&client, time, feature_one_10, 0.1).await {
+                    error!("Failed to insert order book imbalance: {}", e);
+                }
+            }
+            BinanceData::AggTrade(agg_trade_event) => {
+                current_price = agg_trade_event.p.clone();
+            }
+            _ => {}
         }
     }
 
@@ -95,7 +143,7 @@ pub async fn timescale_batch_writer(
                     )
                     .await
                     {
-                        eprintln!("Failed to insert order book update: {}", e);
+                        error!("Failed to insert order book update: {}", e);
                     }
                 }
             }
@@ -106,7 +154,7 @@ pub async fn timescale_batch_writer(
                     if let Err(e) =
                         batch_insert_liquidation(&client, std::mem::take(&mut liquidations)).await
                     {
-                        eprintln!("Failed to insert liquidation events: {}", e);
+                        error!("Failed to insert liquidation events: {}", e);
                     }
                 }
             }
@@ -116,7 +164,7 @@ pub async fn timescale_batch_writer(
                     if let Err(e) =
                         batch_insert_agg_trade(&client, std::mem::take(&mut agg_trades)).await
                     {
-                        eprintln!("Failed to insert agg trade events: {}", e);
+                        error!("Failed to insert agg trade events: {}", e);
                     }
                 }
             }

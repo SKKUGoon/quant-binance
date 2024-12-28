@@ -22,3 +22,8 @@ Change the `connection_str` in `src/database/postgres.rs`'s `connect_to_timescal
 # Symbol is required (in lowercase)
 cargo run -- --symbol btcusdt
 ```
+
+```bash
+# Set log level
+RUST_LOG=info cargo run -- --symbol btcusdt
+```

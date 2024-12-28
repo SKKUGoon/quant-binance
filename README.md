@@ -10,6 +10,8 @@
 - Collects data from Binance Websocket for single coin
 - Writes data to Timescale DB
 
+- `./database/features` contains quantitative feature calculation logic - It has been hidden from the repo.
+
 ## Setup
 
 Prepare TimeScale postgres database.

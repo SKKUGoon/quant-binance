@@ -1,6 +1,6 @@
 use tokio_postgres::Client;
 
-use crate::binance::agg_trade::AggregateTradeEvent;
+use crate::cex::binance::agg_trade::AggregateTradeEvent;
 
 #[allow(dead_code)]
 pub async fn insert_agg_trade(

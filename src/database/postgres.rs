@@ -6,7 +6,7 @@ use crate::database::{
     order_book::batch_insert_order_book,
 };
 use crate::{
-    binance::websocket::BinanceData,
+    cex::binance::websocket::BinanceData,
     database::{
         agg_trade::{batch_insert_agg_trade, insert_agg_trade},
         liquidation::{batch_insert_liquidation, insert_liquidation},

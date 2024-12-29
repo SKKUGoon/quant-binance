@@ -1,7 +1,7 @@
-mod binance;
+mod cex;
 mod database;
 
-use binance::websocket::{connect_to_binance, BinanceData};
+use cex::binance::websocket::{connect_to_binance, BinanceData};
 use clap::{Arg, Command};
 use database::postgres::{feature_writer, timescale_batch_writer};
 use log::{error, info};

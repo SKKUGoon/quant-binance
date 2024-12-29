@@ -1,8 +1,11 @@
-use crate::binance::agg_trade::{handle_agg_trade, AggregateTradeEvent};
-use crate::binance::liquidation::{handle_liquidation_order, LiquidationEvent};
-use crate::binance::order_book::{fetch_depth_snapshot, handle_order_book, OrderBook};
 use futures::StreamExt;
 use tokio::sync::mpsc;
+
+use super::{
+    agg_trade::{handle_agg_trade, AggregateTradeEvent},
+    liquidation::{handle_liquidation_order, LiquidationEvent},
+    order_book::{fetch_depth_snapshot, handle_order_book, OrderBook},
+};
 
 #[allow(dead_code)]
 #[derive(Debug)]

@@ -1,5 +1,6 @@
-use crate::binance::liquidation::LiquidationEvent;
 use tokio_postgres::Client;
+
+use crate::cex::binance::liquidation::LiquidationEvent;
 
 pub async fn insert_liquidation(
     client: &Client,

@@ -13,7 +13,7 @@ use crate::{
         order_book::insert_order_book,
     },
 };
-use log::error;
+use log::{error, info};
 use tokio::sync::mpsc;
 use tokio_postgres::{Client, NoTls};
 
@@ -73,6 +73,7 @@ pub async fn timescale_writer(
 pub async fn feature_writer(
     mut rx: mpsc::Receiver<BinanceData>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Starting feature writer");
     let client = connect_to_timescaledb().await?;
     let mut current_price = String::from("0.0");
 
@@ -115,6 +116,7 @@ pub async fn feature_writer(
 pub async fn timescale_batch_writer(
     mut rx: mpsc::Receiver<BinanceData>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Starting raw data writer");
     let mut order_book_bids = Vec::new();
     let mut order_book_asks = Vec::new();
     let mut liquidations = Vec::new();

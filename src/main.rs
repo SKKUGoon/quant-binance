@@ -1,13 +1,13 @@
 mod cex;
 mod database;
 
-use cex::binance::websocket::{connect_to_binance, BinanceData};
+use cex::binance::websocket::{BinanceData, BinanceStreamBuilder};
 use clap::{Arg, Command};
 use database::postgres::{feature_writer, timescale_batch_writer};
 use log::{error, info};
 use std::io::{stdout, Write};
-use tokio::signal;
-use tokio::{sync::mpsc, time::Instant};
+use tokio::{signal, sync::mpsc, time::Instant};
+
 struct Config {
     symbol: String,
 }
@@ -51,21 +51,11 @@ async fn main() {
     let (tx_data, rx_data) = mpsc::channel::<BinanceData>(9999);
     let (tx_feature, rx_feature) = mpsc::channel::<BinanceData>(9999);
 
-    tokio::spawn(async move {
-        if let Err(e) = timescale_batch_writer(rx_data).await {
-            error!("Failed to start timescale writer: {}", e);
-        }
-    });
-
-    tokio::spawn(async move {
-        if let Err(e) = feature_writer(rx_feature).await {
-            error!("Failed to start feature writer: {}", e);
-        }
-    });
-
+    // Monitor buffer usage
     tokio::spawn({
         let start_time = Instant::now();
-        let tx_monitor = tx_data.clone(); // Clone `tx` specifically for monitoring
+        let tx_mon_data = tx_data.clone(); // Clone `tx` specifically for monitoring
+        let tx_mon_feat = tx_feature.clone(); // Clone `tx` specifically for monitoring
         async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -74,24 +64,51 @@ async fn main() {
                 let formatted_time = format_elapsed_time(elapsed);
 
                 info!(
-                    "Time passed: {}s | Buffer usage: {} / 9999 ",
+                    "Time passed: {}s | Buffer Usage: (Data) {} / 9999 (Feature) {} / 9999 ",
                     formatted_time,
-                    tx_monitor.capacity()
+                    tx_mon_data.capacity(),
+                    tx_mon_feat.capacity()
                 );
                 stdout().flush().unwrap();
             }
         }
     });
 
+    // Timescale DB writer
     tokio::spawn(async move {
-        if let Err(e) = connect_to_binance(&symbol_feature, tx_feature).await {
-            error!("Failed to connect to Binance: {}", e);
+        if let Err(e) = timescale_batch_writer(rx_data).await {
+            error!("Failed to start timescale writer: {}", e);
         }
     });
 
+    // Feature writer
     tokio::spawn(async move {
-        if let Err(e) = connect_to_binance(&symbol_data, tx_data).await {
-            error!("Error: {}", e);
+        if let Err(e) = feature_writer(rx_feature).await {
+            error!("Failed to start feature writer: {}", e);
+        }
+    });
+
+    // Binance data stream
+    tokio::spawn(async move {
+        if let Err(e) = BinanceStreamBuilder::new(&symbol_data)
+            // .with_depth()
+            .with_agg_trade()
+            .build(tx_data)
+            .await
+        {
+            error!("Failed to connect to Binance Data stream: {}", e);
+        }
+    });
+
+    // Binance feature stream
+    tokio::spawn(async move {
+        if let Err(e) = BinanceStreamBuilder::new(&symbol_feature)
+            .with_depth()
+            .with_agg_trade()
+            .build(tx_feature)
+            .await
+        {
+            error!("Failed to connect to Binance feature stream: {}", e);
         }
     });
 

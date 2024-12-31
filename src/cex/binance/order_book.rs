@@ -1,11 +1,10 @@
-// Order book management
-
 use futures::{SinkExt, StreamExt};
 use log::{error, info};
 use serde::Deserialize;
-use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
+
+use crate::cex::combined_order_book::CombinedOrderBook;
 
 use super::websocket::BinanceData;
 
@@ -40,105 +39,6 @@ pub struct DepthSnapShot {
     pub asks: Vec<(String, String)>,
 }
 
-#[derive(Debug, Clone)]
-pub struct OrderBook {
-    pub bids: HashMap<String, String>, // Price -> Quantity
-    pub asks: HashMap<String, String>, // Price -> Quantity
-    pub time: u64,
-}
-
-impl OrderBook {
-    pub fn new() -> Self {
-        Self {
-            bids: HashMap::new(),
-            asks: HashMap::new(),
-            time: 0u64,
-        }
-    }
-
-    pub fn update(&mut self, event: &DepthEvent) {
-        self.time = event.E;
-
-        for (price, quantity) in event.b.iter() {
-            if quantity == "0" {
-                self.bids.remove(price);
-            } else {
-                self.bids.insert(price.clone(), quantity.clone());
-            }
-        }
-
-        for (price, quantity) in event.a.iter() {
-            if quantity == "0" {
-                self.asks.remove(price);
-            } else {
-                self.asks.insert(price.clone(), quantity.clone());
-            }
-        }
-    }
-
-    fn group_prices(&self, prices: &HashMap<String, String>) -> Vec<(String, f64)> {
-        let mut grouped: HashMap<String, f64> = HashMap::new();
-
-        for (price, quantity) in prices.iter() {
-            let price_f64 = match price.parse::<f64>() {
-                Ok(p) => p,
-                Err(_) => {
-                    error!("Failed to parse price: {}", price);
-                    continue;
-                }
-            };
-            let quantity_f64 = match quantity.parse::<f64>() {
-                Ok(q) => q,
-                Err(_) => {
-                    error!("Failed to parse quantity: {}", quantity);
-                    continue;
-                }
-            };
-
-            let magnitude = (10f64.powf(price_f64.log10().floor() - 2.0)).min(100.0);
-            let range = format!("{:.2}", (price_f64 / magnitude).floor() * magnitude);
-
-            *grouped.entry(range).or_insert(0.0) += quantity_f64;
-        }
-
-        let mut grouped_vec: Vec<(String, f64)> = grouped.into_iter().collect();
-        grouped_vec.sort_by(|(price1, _), (price2, _)| {
-            price2
-                .parse::<f64>()
-                .unwrap_or(0.0)
-                .partial_cmp(&price1.parse::<f64>().unwrap_or(0.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        grouped_vec
-    }
-
-    #[allow(dead_code)]
-    pub fn display(&self) {
-        info!("\n=== Grouped Order Book ===");
-
-        let grouped_asks = self.group_prices(&self.asks);
-        for (range, total_quantity) in grouped_asks.iter() {
-            info!(
-                "ASK  │ Price: {:>10} │ Quantity: {:>10.3}",
-                range, total_quantity
-            );
-        }
-
-        info!("─────┼──────────────────┼────────────────");
-
-        let grouped_bids = self.group_prices(&self.bids);
-        for (range, total_quantity) in grouped_bids.iter() {
-            info!(
-                "BID  │ Price: {:>10} │ Quantity: {:>10.3}",
-                range, total_quantity
-            );
-        }
-
-        info!("=== End of Order Book ===\n");
-    }
-}
-
 pub async fn fetch_depth_snapshot(symbol: &str) -> Result<DepthSnapShot, reqwest::Error> {
     let url = format!(
         "https://fapi.binance.com/fapi/v1/depth?symbol={}&limit=1000",
@@ -162,7 +62,7 @@ pub async fn fetch_depth_snapshot(symbol: &str) -> Result<DepthSnapShot, reqwest
 pub async fn handle_order_book<R, S>(
     mut read: R,
     mut write: S,
-    order_book: &mut OrderBook,
+    order_book: &mut CombinedOrderBook,
     snapshot: DepthSnapShot,
     tx: mpsc::Sender<BinanceData>,
 ) where
@@ -195,7 +95,7 @@ pub async fn handle_order_book<R, S>(
                             error!("Event out of order: Reinitializing");
                             continue;
                         }
-                        order_book.update(&event.data);
+                        order_book.update_binance(&event.data);
 
                         if tx
                             .send(BinanceData::OrderBook(order_book.clone()))
